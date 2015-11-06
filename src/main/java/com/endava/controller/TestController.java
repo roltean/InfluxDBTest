@@ -28,7 +28,7 @@ public class TestController {
     @Autowired
     public TestController(MetricRegistry metricRegistry){
         this.counter = metricRegistry.counter("testCounter");
-        this.timer = metricRegistry.timer("testMeter");
+        this.timer = metricRegistry.timer("testTimer");
     }
 
     @RequestMapping(value = "/counter", method = RequestMethod.POST)

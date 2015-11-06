@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
@@ -34,14 +33,9 @@ public class InfluxDbTestApplication {
 
     @Bean
     @ConditionalOnProperty(prefix = "influxdb.reporter", name = "enabled", matchIfMissing = true)
-    public InfluxDbReporter influxDbReporter(Environment environment, ServerProperties serverProperties, InfluxDbProperties influxDbProperties, MetricRegistry metricRegistry){
+    public InfluxDbReporter influxDbReporter(Environment environment, InfluxDbProperties influxDbProperties, MetricRegistry metricRegistry){
         String applicationName = environment.getRequiredProperty("spring.application.name");
-        String hostName = "Unknown";
-        try {
-            hostName = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            LOG.warn("Unable to get hostname. Using default hostname 'unknown'", e);
-        }
+        String hostName = getHostname();
 
         InfluxDB influxDB = InfluxDBFactory.connect(influxDbProperties.getUrl(), influxDbProperties.getUser(), influxDbProperties.getPassword());
         BatchPoints batchPoints = BatchPoints
@@ -55,5 +49,15 @@ public class InfluxDbTestApplication {
                 .build(influxDB, batchPoints);
         reporter.start(5, TimeUnit.SECONDS);
         return reporter;
+    }
+
+    private String getHostname() {
+        String hostName = "Unknown";
+        try {
+            hostName = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            LOG.warn("Unable to get hostname. Using default hostname 'unknown'", e);
+        }
+        return hostName;
     }
 }
