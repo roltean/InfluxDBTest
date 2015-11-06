@@ -1,31 +1,29 @@
-package com.endava;
+package com.endava.reporter;
 
 import com.codahale.metrics.*;
 import metrics_influxdb.InfluxdbReporter;
 import org.influxdb.InfluxDB;
 import org.influxdb.dto.BatchPoints;
 import org.influxdb.dto.Point;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Created by roltean on 05.11.2015.
- */
 public class InfluxDbReporter extends ScheduledReporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(InfluxDbReporter.class);
 
     private final InfluxDB influxdb;
     private final BatchPoints batchPoints;
     private final Clock clock;
-    private final String prefix;
-    private final boolean skipIdleMetrics;
 
     public InfluxDbReporter(MetricRegistry registry,
                             InfluxDB influxdb,
                             BatchPoints batchPoints,
                             Clock clock,
-                            String prefix,
                             TimeUnit rateUnit,
                             TimeUnit durationUnit,
                             MetricFilter filter,
@@ -34,8 +32,6 @@ public class InfluxDbReporter extends ScheduledReporter {
         this.influxdb = influxdb;
         this.batchPoints = batchPoints;
         this.clock = clock;
-        this.prefix = (prefix == null) ? "" : (prefix.trim() + ".");
-        this.skipIdleMetrics = skipIdleMetrics;
     }
 
     @Override
@@ -44,13 +40,34 @@ public class InfluxDbReporter extends ScheduledReporter {
                        SortedMap<String, Histogram> histograms,
                        SortedMap<String, Meter> meters,
                        SortedMap<String, Timer> timers) {
+        LOG.debug("Start reporting metrics to InfluxDB");
         final long timestamp = clock.getTime();
         reportCounters(counters, timestamp);
+        reportTimers(timers, timestamp);
         influxdb.write(batchPoints);
+        LOG.debug("Finish reporting metrics to InfluxDB");
+    }
+
+    private void reportTimers(SortedMap<String, Timer> timers, long timestamp) {
+        for (Map.Entry<String, Timer> entry : timers.entrySet()) {
+            LOG.debug("Adding timer '{}'", entry.getKey());
+            Point count = Point.measurement(entry.getKey())
+                    .time(timestamp, TimeUnit.MILLISECONDS)
+                    .field("count", entry.getValue().getCount())
+                    .build();
+            batchPoints.point(count);
+
+            Point oneMinuteRate = Point.measurement(entry.getKey())
+                    .time(timestamp, TimeUnit.MILLISECONDS)
+                    .field("oneMinuteRate", entry.getValue().getOneMinuteRate())
+                    .build();
+            batchPoints.point(oneMinuteRate);
+        }
     }
 
     private void reportCounters(SortedMap<String, Counter> counters, long timestamp) {
         for (Map.Entry<String, Counter> entry : counters.entrySet()) {
+            LOG.debug("Adding counter '{}'", entry.getKey());
             Point count = Point.measurement(entry.getKey())
                     .time(timestamp, TimeUnit.MILLISECONDS)
                     .field("count", entry.getValue().getCount())
@@ -77,7 +94,6 @@ public class InfluxDbReporter extends ScheduledReporter {
     public static class Builder {
         private final MetricRegistry registry;
         private Clock clock;
-        private String prefix;
         private TimeUnit rateUnit;
         private TimeUnit durationUnit;
         private MetricFilter filter;
@@ -86,7 +102,6 @@ public class InfluxDbReporter extends ScheduledReporter {
         private Builder(MetricRegistry registry) {
             this.registry = registry;
             this.clock = Clock.defaultClock();
-            this.prefix = null;
             this.rateUnit = TimeUnit.SECONDS;
             this.durationUnit = TimeUnit.MILLISECONDS;
             this.filter = MetricFilter.ALL;
@@ -100,17 +115,6 @@ public class InfluxDbReporter extends ScheduledReporter {
          */
         public Builder withClock(Clock clock) {
             this.clock = clock;
-            return this;
-        }
-
-        /**
-         * Prefix all metric names with the given string.
-         *
-         * @param prefix the prefix for all metric names
-         * @return {@code this}
-         */
-        public Builder prefixedWith(String prefix) {
-            this.prefix = prefix;
             return this;
         }
 
@@ -171,7 +175,6 @@ public class InfluxDbReporter extends ScheduledReporter {
                     influxdb,
                     batchPoints,
                     clock,
-                    prefix,
                     rateUnit,
                     durationUnit,
                     filter,

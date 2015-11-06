@@ -1,0 +1,11 @@
+spring.application.name: InfluxDB App
+
+server.port: 9080
+
+info.name: ${spring.application.name}
+
+influxdb:
+    url: http://192.168.33.21:8086
+    user: root
+    password: root
+    database: monitor
