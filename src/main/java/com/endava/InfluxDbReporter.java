@@ -1,9 +1,10 @@
 package com.endava;
 
 import com.codahale.metrics.*;
-import metrics_influxdb.Influxdb;
 import metrics_influxdb.InfluxdbReporter;
 import org.influxdb.InfluxDB;
+import org.influxdb.dto.BatchPoints;
+import org.influxdb.dto.Point;
 
 import java.util.Map;
 import java.util.SortedMap;
@@ -14,45 +15,47 @@ import java.util.concurrent.TimeUnit;
  */
 public class InfluxDbReporter extends ScheduledReporter {
 
-    public InfluxDbReporter(MetricRegistry registry, InfluxDB influxdb, Clock clock, String prefix, TimeUnit rateUnit, TimeUnit durationUnit, MetricFilter filter, boolean skipIdleMetrics) {
+    private final InfluxDB influxdb;
+    private final BatchPoints batchPoints;
+    private final Clock clock;
+    private final String prefix;
+    private final boolean skipIdleMetrics;
 
-
+    public InfluxDbReporter(MetricRegistry registry,
+                            InfluxDB influxdb,
+                            BatchPoints batchPoints,
+                            Clock clock,
+                            String prefix,
+                            TimeUnit rateUnit,
+                            TimeUnit durationUnit,
+                            MetricFilter filter,
+                            boolean skipIdleMetrics) {
+        super(registry, "influxdb-reporter", filter, rateUnit, durationUnit);
+        this.influxdb = influxdb;
+        this.batchPoints = batchPoints;
+        this.clock = clock;
+        this.prefix = (prefix == null) ? "" : (prefix.trim() + ".");
+        this.skipIdleMetrics = skipIdleMetrics;
     }
 
     @Override
-    @SuppressWarnings("rawtypes")
     public void report(SortedMap<String, Gauge> gauges,
                        SortedMap<String, Counter> counters,
                        SortedMap<String, Histogram> histograms,
                        SortedMap<String, Meter> meters,
                        SortedMap<String, Timer> timers) {
         final long timestamp = clock.getTime();
+        reportCounters(counters, timestamp);
+        influxdb.write(batchPoints);
+    }
 
-        // oh it'd be lovely to use Java 7 here
-        try {
-            for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
-                reportGauge(entry.getKey(), entry.getValue(), timestamp);
-            }
-
-            for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-                reportCounter(entry.getKey(), entry.getValue(), timestamp);
-            }
-
-            for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
-                reportHistogram(entry.getKey(), entry.getValue(), timestamp);
-            }
-
-            for (Map.Entry<String, Meter> entry : meters.entrySet()) {
-                reportMeter(entry.getKey(), entry.getValue(), timestamp);
-            }
-
-            for (Map.Entry<String, Timer> entry : timers.entrySet()) {
-                reportTimer(entry.getKey(), entry.getValue(), timestamp);
-            }
-            influxdb.sendRequest(true, false);
-        } catch (Exception e) {
-            influxdb.resetRequest();
-            LOGGER.warn("Unable to report to InfluxDB, forgot data", influxdb, e);
+    private void reportCounters(SortedMap<String, Counter> counters, long timestamp) {
+        for (Map.Entry<String, Counter> entry : counters.entrySet()) {
+            Point count = Point.measurement(entry.getKey())
+                    .time(timestamp, TimeUnit.MILLISECONDS)
+                    .field("count", entry.getValue().getCount())
+                    .build();
+            batchPoints.point(count);
         }
     }
 
@@ -157,14 +160,16 @@ public class InfluxDbReporter extends ScheduledReporter {
 
         /**
          * Builds a {@link InfluxdbReporter} with the given properties, sending
-         * metrics using the given {@link Influxdb} client.
+         * metrics using the given {@link org.influxdb.InfluxDB} client.
          *
-         * @param influxdb a {@link Influxdb} client
+         * @param influxdb a {@link org.influxdb.InfluxDB} client
+         * @param batchPoints a {@link org.influxdb.dto.BatchPoints} client
          * @return a {@link InfluxdbReporter}
          */
-        public InfluxdbReporter build(InfluxDB influxdb) {
+        public InfluxDbReporter build(InfluxDB influxdb, BatchPoints batchPoints) {
             return new InfluxDbReporter(registry,
                     influxdb,
+                    batchPoints,
                     clock,
                     prefix,
                     rateUnit,
@@ -172,5 +177,7 @@ public class InfluxDbReporter extends ScheduledReporter {
                     filter,
                     skipIdleMetrics);
         }
+
+
     }
 }
