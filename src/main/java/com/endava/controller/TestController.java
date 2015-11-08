@@ -28,7 +28,7 @@ public class TestController {
     @Autowired
     public TestController(MetricRegistry metricRegistry){
         this.counter = metricRegistry.counter("testCounter");
-        this.timer = metricRegistry.timer("testTimer");
+        this.timer = metricRegistry.timer("com.endava.controller.TestController.increaseMeter");
     }
 
     @RequestMapping(value = "/counter", method = RequestMethod.POST)
@@ -40,7 +40,7 @@ public class TestController {
     public void increaseMeter(){
         final Timer.Context context = timer.time();
         try {
-            Thread.sleep(500);
+            Thread.sleep(Double.valueOf(Math.random() * 1000).longValue());
         } catch (InterruptedException e) {
             LOG.warn("Failed to sleep", e);
         } finally {

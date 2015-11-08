@@ -46,6 +46,8 @@ public class InfluxDbTestApplication {
                 .tag("hostname", hostName)
                 .build();
         final InfluxDbReporter reporter = InfluxDbReporter.forRegistry(metricRegistry)
+                .convertRatesTo(TimeUnit.MINUTES)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
                 .build(influxDB, batchPoints);
         reporter.start(5, TimeUnit.SECONDS);
         return reporter;

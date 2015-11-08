@@ -50,16 +50,21 @@ public class InfluxDbReporter extends ScheduledReporter {
 
     private void reportTimers(SortedMap<String, Timer> timers, long timestamp) {
         for (Map.Entry<String, Timer> entry : timers.entrySet()) {
-            LOG.debug("Adding timer '{}'", entry.getKey());
-            Point count = Point.measurement(entry.getKey())
-                    .time(timestamp, TimeUnit.MILLISECONDS)
-                    .field("count", entry.getValue().getCount())
-                    .build();
-            batchPoints.point(count);
+            String timerName = entry.getKey();
+            LOG.debug("Adding timer '{}'", timerName);
 
-            Point oneMinuteRate = Point.measurement(entry.getKey())
+            String[] splittedTimer = timerName.split("\\.");
+            String className = splittedTimer[splittedTimer.length - 2];
+            LOG.debug("ClassName '{}'", className);
+            String methodName = splittedTimer[splittedTimer.length - 1];
+            LOG.debug("MethodName '{}'", methodName);
+
+            Point oneMinuteRate = Point.measurement(className)
                     .time(timestamp, TimeUnit.MILLISECONDS)
                     .field("oneMinuteRate", entry.getValue().getOneMinuteRate())
+                    .field("98thPercentile", entry.getValue().getSnapshot().get98thPercentile())
+                    .field("count", entry.getValue().getCount())
+                    .tag("methodName", methodName)
                     .build();
             batchPoints.point(oneMinuteRate);
         }

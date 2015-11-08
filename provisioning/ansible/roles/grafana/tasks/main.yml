@@ -1,0 +1,16 @@
+- name: download latest grafana
+  get_url: url=https://grafanarel.s3.amazonaws.com/builds/grafana_2.5.0_amd64.deb 
+           dest=/tmp/grafana_2.5.0_amd64.deb
+           validate_certs=no
+  
+- name: install grafana dependencies
+  apt: pkg={{ item }} state=latest install_recommends=yes
+  with_items:
+    - adduser
+    - libfontconfig
+  
+- name: install grafana
+  shell: dpkg -i /tmp/grafana_2.5.0_amd64.deb
+  
+- name: start grafana service
+  service: name=grafana-server state=started enabled=yes

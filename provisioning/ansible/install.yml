@@ -1,0 +1,15 @@
+- hosts: all
+  sudo: True
+  vars:
+    grafana:
+      dbname: grafana
+      username: programmer
+      password: change_me_from_cucamonga
+    influxdb:
+      address: 192.168.33.21
+      dbname: monitor
+      username: root
+      password: root
+  roles:
+    - influxdb
+    - grafana
