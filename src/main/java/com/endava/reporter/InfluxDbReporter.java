@@ -26,8 +26,7 @@ public class InfluxDbReporter extends ScheduledReporter {
                             Clock clock,
                             TimeUnit rateUnit,
                             TimeUnit durationUnit,
-                            MetricFilter filter,
-                            boolean skipIdleMetrics) {
+                            MetricFilter filter) {
         super(registry, "influxdb-reporter", filter, rateUnit, durationUnit);
         this.influxdb = influxdb;
         this.batchPoints = batchPoints;
@@ -51,6 +50,7 @@ public class InfluxDbReporter extends ScheduledReporter {
     private void reportTimers(SortedMap<String, Timer> timers, long timestamp) {
         for (Map.Entry<String, Timer> entry : timers.entrySet()) {
             String timerName = entry.getKey();
+            Timer timer = entry.getValue();
             LOG.debug("Adding timer '{}'", timerName);
 
             String[] splittedTimer = timerName.split("\\.");
@@ -59,25 +59,48 @@ public class InfluxDbReporter extends ScheduledReporter {
             String methodName = splittedTimer[splittedTimer.length - 1];
             LOG.debug("MethodName '{}'", methodName);
 
-            Point oneMinuteRate = Point.measurement(className)
+            double oneMinuteRate = convertRate(timer.getOneMinuteRate());
+            double percentile98 = convertDuration(timer.getSnapshot().get98thPercentile());
+            double percentile95 = convertDuration(timer.getSnapshot().get95thPercentile());
+            double mean = convertDuration(timer.getSnapshot().getMean());
+            long count = entry.getValue().getCount();
+
+            LOG.debug("OneMinuteRate '{}'", oneMinuteRate);
+            LOG.debug("98thPercentile '{}'", percentile98);
+            LOG.debug("95thPercentile '{}'", percentile95);
+            LOG.debug("Mean '{}'", percentile95);
+            LOG.debug("Count '{}'", count);
+
+            Point oneMinuteRatePoint = Point.measurement("oneMinuteRate")
                     .time(timestamp, TimeUnit.MILLISECONDS)
-                    .field("oneMinuteRate", entry.getValue().getOneMinuteRate())
-                    .field("98thPercentile", entry.getValue().getSnapshot().get98thPercentile())
-                    .field("count", entry.getValue().getCount())
+                    .field("oneMinuteRate", oneMinuteRate)
+                    .tag("className", className)
                     .tag("methodName", methodName)
                     .build();
-            batchPoints.point(oneMinuteRate);
+            Point responseTimePoint = Point.measurement("responseTime")
+                    .time(timestamp, TimeUnit.MILLISECONDS)
+                    .field("98thPercentile", percentile98)
+                    .field("95thPercentile", percentile95)
+                    .field("mean", mean)
+                    .tag("className", className)
+                    .tag("methodName", methodName)
+                    .build();
+            batchPoints.point(oneMinuteRatePoint);
+            batchPoints.point(responseTimePoint);
         }
     }
 
     private void reportCounters(SortedMap<String, Counter> counters, long timestamp) {
         for (Map.Entry<String, Counter> entry : counters.entrySet()) {
             LOG.debug("Adding counter '{}'", entry.getKey());
-            Point count = Point.measurement(entry.getKey())
+            Counter counter = entry.getValue();
+            long count = counter.getCount();
+            Point counterPoint = Point.measurement(entry.getKey())
                     .time(timestamp, TimeUnit.MILLISECONDS)
-                    .field("count", entry.getValue().getCount())
+                    .field("count", count)
                     .build();
-            batchPoints.point(count);
+            batchPoints.point(counterPoint);
+            counter.dec(counter.getCount());
         }
     }
 
@@ -102,7 +125,6 @@ public class InfluxDbReporter extends ScheduledReporter {
         private TimeUnit rateUnit;
         private TimeUnit durationUnit;
         private MetricFilter filter;
-        private boolean skipIdleMetrics;
 
         private Builder(MetricRegistry registry) {
             this.registry = registry;
@@ -110,17 +132,6 @@ public class InfluxDbReporter extends ScheduledReporter {
             this.rateUnit = TimeUnit.SECONDS;
             this.durationUnit = TimeUnit.MILLISECONDS;
             this.filter = MetricFilter.ALL;
-        }
-
-        /**
-         * Use the given {@link Clock} instance for the time.
-         *
-         * @param clock a {@link Clock} instance
-         * @return {@code this}
-         */
-        public Builder withClock(Clock clock) {
-            this.clock = clock;
-            return this;
         }
 
         /**
@@ -157,17 +168,6 @@ public class InfluxDbReporter extends ScheduledReporter {
         }
 
         /**
-         * Only report metrics that have changed.
-         *
-         * @param skipIdleMetrics
-         * @return {@code this}
-         */
-        public Builder skipIdleMetrics(boolean skipIdleMetrics) {
-            this.skipIdleMetrics = skipIdleMetrics;
-            return this;
-        }
-
-        /**
          * Builds a {@link InfluxdbReporter} with the given properties, sending
          * metrics using the given {@link org.influxdb.InfluxDB} client.
          *
@@ -182,8 +182,7 @@ public class InfluxDbReporter extends ScheduledReporter {
                     clock,
                     rateUnit,
                     durationUnit,
-                    filter,
-                    skipIdleMetrics);
+                    filter);
         }
 
 

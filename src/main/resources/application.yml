@@ -5,8 +5,11 @@ server.port: 9080
 info.name: ${spring.application.name}
 
 influxdb:
-    url: http://192.168.33.21:8086
+    url: http://localhost:8086
     user: root
     password: root
-    database: monitor
+    database: spica
 
+logging.level:
+    com.endava: DEBUG
+    org.springframework.web: INFO
